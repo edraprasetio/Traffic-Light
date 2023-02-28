@@ -182,7 +182,7 @@ functionality.
 #define Prio_Task_Traffic_Display	( tskIDLE_PRIORITY )
 
 uint16_t g_flowrate;
-uint16_t g_light_colour;
+uint16_t g_light_color;
 uint16_t g_car_value;
 
 
@@ -200,7 +200,9 @@ uint16_t g_car_value;
 
 
 
-
+SemaphoreHandle_t		xMutexFlow;
+SemaphoreHandle_t		xMutexTrafficLight;
+SemaphoreHandle_t		xMutexCarPosition;
 
 
 /*
@@ -209,6 +211,11 @@ uint16_t g_car_value;
  */
 void prvSetupHardware( void );
 void ShiftRegisterValuePreLight( uint16_t value );
+//static void Traffic_Flow_Task( void *pvParameters);
+//static void Traffic_Generator_Task( void *pvParameters);
+//static void Traffic_Light_State_Task( void *pvParameters);
+static void System_Display_Task( void *pvParameters);
+
 
 /*
  * The queue send and receive tasks as described in the comments at the top of
@@ -237,6 +244,36 @@ int main(void)
 	/* Configure the system ready to run the demo.  The clock configuration
 	can be done here if it was not done before main() was called. */
 	prvSetupHardware();
+
+	xMutexFlow = xSemaphoreCreateMutex();
+	if( xMutexFlow == NULL) {
+		printf("ERROR: No Semaphore\n");
+	}
+	else {
+		xSemaphoreGive( xMutexFlow);
+	}
+
+	xMutexTrafficLight = xSemaphoreCreateMutex();
+	if( xMutexTrafficLight == NULL) {
+		printf("ERROR: No Semaphore\n");
+	}
+	else {
+		xSemaphoreGive( xMutexTrafficLight);
+	}
+
+	xMutexCarPosition = xSemaphoreCreateMutex();
+	if( xMutexCarPosition == NULL) {
+		printf("ERROR: No Semaphore\n");
+	}
+	else {
+		xSemaphoreGive( xMutexCarPosition);
+	}
+//	xTaskCreate( Traffic_Flow_Task, "Flow", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Flow, NULL);
+//	xTaskCreate( Traffic_Generator_Task, "Generator", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Create, NULL);
+//	xTaskCreate( Traffic_Light_State_Task, "Light-State", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Light, NULL);
+	xTaskCreate( System_Display_Task, "Display", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Display, NULL);
+	
+	
 
 	//uint16_t newactiveprelighttraffic[8] = {0};
 	while (1)
@@ -287,6 +324,76 @@ int main(void)
 	return 0;
 }
 
+void System_Display_Task( void *pvParameters) {
+	uint16_t car_value = 0;
+	uint16_t light_color = 1;
+	uint16_t currentactiveprelighttraffic[8] = {0};
+	uint16_t newactiveprelighttraffic[8] = {0};
+
+	while(1){
+
+		vTaskDelay(500);
+
+		if(xSemaphoreTake( xMutexCarPosition, ( TickType_t) 10) == pdTRUE) {
+			car_value = g_car_value;
+			xSemaphoreGive( xMutexCarPosition);
+			printf("DisplayTask: Accessed xMutexCars, updated local car_value:  %u. \n", car_value );
+
+		}
+		else {
+			printf("Mutex Car Unavailable \n");
+		}
+
+		if(xSemaphoreTake( xMutexTrafficLight, ( TickType_t) 0) == pdTRUE) {
+			light_color = g_light_color;
+			xSemaphoreGive( xMutexTrafficLight);
+			printf("DisplayTask: Accessed:  %u. \n", light_color );
+
+		}
+		else {
+			printf("Mutex Light Unavailable \n");
+		}
+
+		if( light_color == 1) {
+//			Green light
+			ShiftRegisterValuePreLight(car_value);
+
+			newactiveprelighttraffic[0] = car_value;
+
+			for (uint16_t i = 1; i < 8; i++) {
+				newactiveprelighttraffic[i] = currentactiveprelighttraffic[i - 1];
+			}
+		}
+		else if (light_color == 0) {
+//			Red light
+
+			uint16_t emptyQueue = 0;
+
+			for (uint16_t i = 7; i > 0; i--) {
+
+				if(currentactiveprelighttraffic[i] == 0){
+					emptyQueue = 1;
+					newactiveprelighttraffic[0] = car_value;
+				}
+
+				if(emptyQueue == 1) {
+					newactiveprelighttraffic[i] = currentactiveprelighttraffic[i -1];
+				}
+				else {
+					newactiveprelighttraffic[i] = currentactiveprelighttraffic[i];
+				}
+			}
+
+			for (uint16_t i = 7; i >= 0; i--) {
+				ShiftRegisterValuePreLight(newactiveprelighttraffic[i]);
+			}
+		}
+
+		for (uint16_t i = 0; i < 8; i++) {
+			currentactiveprelighttraffic[i] = newactiveprelighttraffic[i];
+		}
+	}
+}
 
 
 /*-----------------------------------------------------------*/
