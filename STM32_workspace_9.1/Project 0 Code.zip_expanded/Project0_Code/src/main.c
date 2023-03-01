@@ -270,8 +270,8 @@ int main(void)
 
 	xTaskCreate( Manager_Task, "Manager", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
 //	xTaskCreate( Traffic_Flow_Task, "Flow", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Flow, NULL);
-//	xTaskCreate( Traffic_Generator_Task, "Generator", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Create, NULL);
-//	xTaskCreate( Traffic_Light_State_Task, "Light-State", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Light, NULL);
+	xTaskCreate( Traffic_Generator_Task, "Generator", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Create, NULL);
+	xTaskCreate( Traffic_Light_State_Task, "Light-State", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Light, NULL);
 	xTaskCreate( System_Display_Task, "Display", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Display, NULL);
 
 	// Create timers for the traffic light
@@ -280,7 +280,7 @@ int main(void)
 //	Green_Light_TIMER = xTimerCreate( "Green_Light_Timer", 10000 / portTICK_PERIOD_MS, pdFALSE, ( void * ) 0, Green_Timer_Callback);
 
 //	xTimerStart( Green_Light_TIMER, 0);
-//	xLightTimer = xTimerCreate( "Traffic_Timer", 2000/portTICK_PERIOD_MS, pdFalse, (void *) 0, LIGHT_TIMER_Callback);
+	xLightTimer = xTimerCreate( "Traffic_Timer", 2000/portTICK_PERIOD_MS, pdFalse, (void *) 0, LIGHT_TIMER_Callback);
 
 //	TRAFFIC_Init.light_state = 1;
 //	TRAFFIC_Init.flow = 4;
@@ -295,12 +295,14 @@ int main(void)
 
 static void Manager_Task( void *pvParameters ) {
 
+
+
+	int new[19] = {0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0};
 	struct TRAFFIC_Struct Traffic_state;
 	Traffic_state.car = 0;
+	//Traffic_state.carArray = new;
+	memcpy(Traffic_state.carArray, new, ARRAY_SIZE*sizeof(int));
 
-	int new[ARRAY_SIZE] = {1,1,1,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,0};
-	memcpy(Traffic_state.carArray, new, ARRAY_SIZE);
-	
 	for(int i = 0; i < 19; i++) {
 		printf("MANAGER: Array: %i, Value: %i \n", i, Traffic_state.carArray[i]);
 	}
@@ -324,40 +326,49 @@ static void Manager_Task( void *pvParameters ) {
 
 // Traffic Generator Task
 /*-----------------------------------------------------------*/
-//void Traffic_Generator_Task(void *pvParameters){
-////	Generate Traffic
-//	printf("Generate Traffic \n");
-//	struct TRAFFIC_Struct TRAFFIC_s;
-//
-//	uint16_t flowrate;
-//	uint16_t car_value;
-//
-//	while(1){
-//
-//		vTaskDelay(50);
-//
-////		Retrieve flow value
-////		xQueueReceive( xQueue_handle, &(TRAFFIC_r), 500);
-////
-////		flowrate = TRAFFIC_r->flow;
-////		flowrate = 4;
-////		printf("GENERATOR_Task: Retrieved flow rate: %u. \n", flowrate);
-//
-//
-//// 		Generate random number based on potentiometer
-//		car_value = (rand() % 100);
-//		printf("GENERATOR_Task: Updated car value: %u. \n", car_value);
-//
-////		Set car value to queue and send it back to the queue
-//		TRAFFIC_s.car = car_value;
-//		if( xQueueSend( xQueue_handle, (void *) &TRAFFIC_s, 1000)) {
-//			vTaskDelay(250);
-//		} else {
-//			printf("GENERATOR_Task failed);
-//		}
-//
-//	}
-//}
+void Traffic_Generator_Task(void *pvParameters){
+//	Generate Traffic
+	printf("Generate Traffic \n");
+	struct TRAFFIC_Struct Traffic;
+
+	uint16_t flowrate;
+	uint16_t car_value;
+
+	while(1){
+		if(xQueueReceive(xQueue_handle, &Traffic, 500)){
+
+	//		Retrieve flow value
+	//		xQueueReceive( xQueue_handle, &(TRAFFIC_r), 500);
+	//
+	//		flowrate = TRAFFIC_r->flow;
+	//		flowrate = 4;
+	//		printf("GENERATOR_Task: Retrieved flow rate: %u. \n", flowrate);
+
+
+	// 		Generate random number based on potentiometer
+//			car_value = (rand() % 10 + 1);
+			printf("GENERATOR_Task: Updated car value: %u. \n", car_value);
+
+	//		Set car value to queue and send it back to the queue
+			Traffic.car = 1;
+			if( xQueueSend( xQueue_handle, (void *) &Traffic, 1000)) {
+				vTaskDelay(1000);
+			} else {
+				printf("GENERATOR_Task failed");
+			}
+
+		}
+	}
+}
+
+void Traffic_Light_State_Task( void *pvParameters){
+
+
+}
+
+void LIGHT_TIMER_Callback(xTimerHandle xTimer){
+
+}
 
 void System_Display_Task( void *pvParameters){
 
@@ -413,7 +424,8 @@ void Shift_Traffic( struct TRAFFIC_Struct *traffic) {
 		printf("SHIFT: Array: %i, Value: %i \n", i, traffic->carArray[i]);
 	}
 
-	traffic->carArray[0] = 0;
+	traffic->carArray[0] = traffic->car;
+	traffic->car = 0;
 
 }
 
