@@ -244,10 +244,9 @@ xQueueHandle xQueue_handle = 0;
 
 struct TRAFFIC_Struct {
 	uint16_t flow;
-	int		carArray[ARRAY_SIZE];
+	int	carArray[ARRAY_SIZE];
 	uint16_t car;
 	uint16_t light_state;
-
 };
 
 int main(void)
@@ -299,14 +298,27 @@ static void Manager_Task( void *pvParameters ) {
 	struct TRAFFIC_Struct Traffic_state;
 	Traffic_state.car = 0;
 
+	int new[ARRAY_SIZE] = {1,1,1,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,0};
+	memcpy(Traffic_state.carArray, new, ARRAY_SIZE);
+	
+	for(int i = 0; i < 19; i++) {
+		printf("MANAGER: Array: %i, Value: %i \n", i, Traffic_state.carArray[i]);
+	}
+
+	//Traffic_state.carArray = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	Traffic_state.light_state = 1;
+	if(xQueueSend(xQueue_handle, &Traffic_state, 1000)) {
+		printf("MANAGER: Sending data to queue \n");
+	}
+
 	while(1) {
-		if(xQueueSend(xQueue_handle, &Traffic_state, 1000)) {
-			printf("MANAGER: Sending data to queue \n");
-			vTaskDelay(1000);
-		}
-		else {
-			printf("MANAGER failed! \n");
-		}
+//		if(xQueueSend(xQueue_handle, &Traffic_state, 1000)) {
+//			printf("MANAGER: Sending data to queue \n");
+		vTaskDelay(1000);
+//		}
+//		else {
+//			printf("MANAGER failed! \n");
+//		}
 	}
 }
 
@@ -356,12 +368,12 @@ void System_Display_Task( void *pvParameters){
 		if(xQueueReceive(xQueue_handle, &Traffic_state, 500)) {
 
 			printf("DISPLAY_TASK: Grabbing value from queue \n");
-			Shift_Traffic(Traffic_state.carArray);
+			Shift_Traffic(&Traffic_state);
 
 			Display_Board(Traffic_state);
 
 			if(xQueueSend(xQueue_handle, &Traffic_state, 1000)) {
-				vTaskDelay(250);
+				vTaskDelay(500);
 			} else {
 				printf("Display fail \n");
 			}
@@ -369,19 +381,14 @@ void System_Display_Task( void *pvParameters){
 	}
 }
 
-void Shift_Traffic( int currentArray[]) {
-
-//	int currentArray[] = traffic.carArray;
-	printf("SHIFT: %u \n", currentArray[0]);
-
-
+void Shift_Traffic( struct TRAFFIC_Struct *traffic) {
 //	shift all lights
 	for(int i = 18; i > 0; i--) {
 
 //		Red light and check if light 8 is on
 		if (i == 8 && global_light_color != 1) {
 			// handle not green case
-			currentArray[i] = 0;
+			traffic->carArray[i] = 0;
 			continue;
 		}
 
@@ -390,25 +397,27 @@ void Shift_Traffic( int currentArray[]) {
 
 			// if light is green just shift normally
 			if(global_light_color == 1){
-				currentArray[i] = currentArray[i - 1];
+				traffic->carArray[i] = traffic->carArray[i - 1];
 			}
 			// NOT GREEN
 			else {
 				// position 7 stops
-				if (currentArray[i] == 0){
-					currentArray[i] = currentArray[i-1];
+				if (traffic->carArray[i] == 0){
+					traffic->carArray[i] = traffic->carArray[i-1];
 				}
 			}
 		} else {
 
-			currentArray[i] = currentArray[i - 1];
+			traffic->carArray[i] = traffic->carArray[i - 1];
 		}
+		printf("SHIFT: Array: %i, Value: %i \n", i, traffic->carArray[i]);
 	}
+
+	traffic->carArray[0] = 0;
+
 }
 
 void Display_Board( struct TRAFFIC_Struct traffic){
-
-	int cars[19];
 
 	GPIO_ResetBits(GPIOC, SHIFT_RESET_PIN);
 	for (int i = 0; i < 10; i++);
@@ -416,14 +425,14 @@ void Display_Board( struct TRAFFIC_Struct traffic){
 
 	for (int val = ARRAY_SIZE - 1; val >= 0; val--) {
 //		Write low bits
-		if (cars[val] == 0) {
-			GPIO_ResetBits(GPIOC, SHIFT_DATA_PIN);
+		if (traffic.carArray[val] == 0) {
+			GPIO_ResetBits(GPIOC, GPIO_Pin_6);
 			GPIO_ResetBits(GPIOC, SHIFT_CLK_PIN);
 			for (int i = 0; i < 5; i++);
 			GPIO_SetBits(GPIOC, SHIFT_CLK_PIN);
 		}
-		if (cars[val] == 1) {
-			GPIO_SetBits(GPIOC, SHIFT_DATA_PIN);
+		if (traffic.carArray[val] == 1) {
+			GPIO_SetBits(GPIOC, GPIO_Pin_6);
 			GPIO_ResetBits(GPIOC, SHIFT_CLK_PIN);
 			for (int i = 0; i < 5; i++);
 			GPIO_SetBits(GPIOC, SHIFT_CLK_PIN);
@@ -806,12 +815,12 @@ void prvSetupHardware(void)
 	RCC_AHB1PeriphClockCmd(LED_CLK_C, ENABLE);
 	//RCC_AHB1PeriphClockCmd(LED_CLK_A, ENABLE);
 
-	GPIO_Init_Shift_1.GPIO_Pin = SHIFT_DATA_PIN | SHIFT_CLK_PIN | GPIO_Pin_8 ;
+	GPIO_Init_Shift_1.GPIO_Pin = GPIO_Pin_6 | SHIFT_CLK_PIN | GPIO_Pin_8 ;
 	GPIO_Init_Shift_1.GPIO_Mode = GPIO_Mode_OUT;
 	GPIO_Init_Shift_1.GPIO_OType = GPIO_OType_PP;
 	GPIO_Init_Shift_1.GPIO_PuPd = GPIO_PuPd_NOPULL;
 	//GPIO_Init_Shift_1.GPIO_Speed = GPIO_Speed_25MHz;
-	//GPIO_Init(SHIFT1_REG_Port, &GPIO_Init_Shift_1);
+	GPIO_Init(SHIFT1_REG_Port, &GPIO_Init_Shift_1);
 
 	GPIO_Init_Traffic.GPIO_Pin = Traffic_Green_Pin | Traffic_Red_Pin | Traffic_Yellow_Pin;
 	GPIO_Init_Traffic.GPIO_Mode = GPIO_Mode_OUT;
