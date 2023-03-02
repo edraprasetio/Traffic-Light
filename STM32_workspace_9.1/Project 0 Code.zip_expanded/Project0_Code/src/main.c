@@ -212,7 +212,7 @@ TimerHandle_t			xLightTimer;
  */
 void prvSetupHardware( void );
 void ShiftRegisterValuePreLight( uint16_t value );
-//static void Traffic_Flow_Task( void *pvParameters);
+static void Traffic_Flow_Task( void *pvParameters);
 static void Traffic_Generator_Task( void *pvParameters);
 static void System_Display_Task( void *pvParameters);
 void LIGHT_TIMER_Callback( xTimerHandle xTimer);
@@ -223,11 +223,6 @@ void xxx(void);
  * The queue send and receive tasks as described in the comments at the top of
  * this file.
  */
-//static void Manager_Task( void *pvParameters );
-//static void Blue_LED_Controller_Task( void *pvParameters );
-//static void Green_LED_Controller_Task( void *pvParameters );
-//static void Red_LED_Controller_Task( void *pvParameters );
-//static void Amber_LED_Controller_Task( void *pvParameters );
 
 xQueueHandle xQueue_handle = 0;
 
@@ -244,21 +239,13 @@ struct TRAFFIC_Struct {
 int main(void)
 {
 
-	/* Initialize LEDs */
 	struct TRAFFIC_Struct TRAFFIC_Init;
-//
-//	// Start with green traffic light
-//	GPIO_SetBits(GPIOC, Traffic_Green_Pin);
-//	xTimerStart( Green_Light_TIMER, 0);
-//	TRAFFIC_Init->light_state = 1;
-
 
 	/* Configure the system ready to run the demo.  The clock configuration
 	can be done here if it was not done before main() was called. */
 	prvSetupHardware();
 
 	xQueue_handle = xQueueCreate( 1, sizeof( TRAFFIC_Init ));
-	printf("SIZE of struct: %u \n", sizeof( TRAFFIC_Init ));
 
 	xTaskCreate( Manager_Task, "Manager", configMINIMAL_STACK_SIZE, NULL, 5, NULL);
 //	xTaskCreate( Traffic_Flow_Task, "Flow", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Flow, NULL);
@@ -268,14 +255,9 @@ int main(void)
 
 //	Create the timer object
 	xLightTimer = xTimerCreate( "Traffic_Timer", 1000 / portTICK_PERIOD_MS, pdFALSE, (void *) 0, LIGHT_TIMER_Callback);
-//
-////	Start the timer
+
+//	Start the timer
 	xTimerStart( xLightTimer, 0);
-
-//	TRAFFIC_Init.light_state = 1;
-//	TRAFFIC_Init.flow = 4;
-//	xQueueSend( xQueue_handle, (void *) &TRAFFIC_Init, 1000);
-
 
 	vTaskStartScheduler();
 
@@ -284,8 +266,6 @@ int main(void)
 }
 
 static void Manager_Task( void *pvParameters ) {
-
-
 
 	int new[ARRAY_SIZE] = {0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0};
 	struct TRAFFIC_Struct Traffic_state;
@@ -302,17 +282,64 @@ static void Manager_Task( void *pvParameters ) {
 	if(xQueueSend(xQueue_handle, &Traffic_state, 1000)) {
 		printf("MANAGER: Sending data to queue \n");
 	}
+	else {
+		printf("MANAGER failed! \n");
+	}
 
 	while(1) {
-//		if(xQueueSend(xQueue_handle, &Traffic_state, 1000)) {
-//			printf("MANAGER: Sending data to queue \n");
-		vTaskDelay(1000);
-//		}
-//		else {
-//			printf("MANAGER failed! \n");
-//		}
+			vTaskDelay(1000);
 	}
 }
+
+// Traffic Flow Task
+/*-----------------------------------------------------------*/
+//void Traffic_Flow_Task(void *pvParameters){
+//
+//	uint16_t adc_val = 0;
+//	uint16_t speed_val = 0;
+//	uint16_t current_speed_val = 0;
+//	uint16_t change_in_speed;
+//	struct TRAFFIC_Struct Traffic;
+//
+//	while(1) {
+//		if(xQueueReceive(xQueue_handle, &Traffic, 500)){
+//
+//			ADC_SoftwareStartConv(ADC1);
+//
+//			while(!ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC));
+//
+//			adc_val = ADC_GetConversionValue(ADC1);
+//			printf("TRAFFIC_FLOW_TASK: ADC value: %u \n", adc_val);
+//
+//
+//
+//	//		Retrieve flow value
+//	//		xQueueReceive( xQueue_handle, &(TRAFFIC_r), 500);
+//	//
+//	//		flowrate = TRAFFIC_r->flow;
+//	//		flowrate = 4;
+//	//		printf("GENERATOR_Task: Retrieved flow rate: %u. \n", flowrate);
+//
+//
+//	// 		Generate random number based on potentiometer
+////			car_value = (rand() % 10 + 1);
+//			printf("GENERATOR_Task: Updated car value: %u. \n", Traffic.car);
+//
+//	//		Set car value to queue and send it back to the queue
+//			Traffic.flow = 4;
+//			if( xQueueSend( xQueue_handle, (void *) &Traffic, 1000)) {
+//				vTaskDelay(1000);
+//			} else {
+//				printf("GENERATOR_Task failed");
+//			}
+//
+//		}
+//	}
+//
+//}
+
+/*-----------------------------------------------------------*/
+
 
 // Traffic Generator Task
 /*-----------------------------------------------------------*/
@@ -353,35 +380,47 @@ void Traffic_Generator_Task(void *pvParameters){
 
 
 void LIGHT_TIMER_Callback(xTimerHandle xTimer){
+	struct TRAFFIC_Struct Traffic;
 
 	printf("TRAFFIC_LIGHT_Callback: Start traffic callback \n");
+	if (xQueueReceive(xQueue_handle, &Traffic, 500)){
+		if( global_light_color == 0) {
+			GPIO_ResetBits(GPIOC, Traffic_Red_Pin);
+			GPIO_SetBits(GPIOC, Traffic_Green_Pin);
+			xTimerChangePeriod(xLightTimer, 3000, 100);
+			xTimerStart(xLightTimer, 0);
+			global_light_color = 1;
+		}
 
-	if( global_light_color == 0) {
-		GPIO_ResetBits(GPIOC, Traffic_Red_Pin);
-		GPIO_SetBits(GPIOC, Traffic_Green_Pin);
-		xTimerChangePeriod(xLightTimer, 3000, 100);
+		//				Green light -> Yellow light
+		else if (global_light_color == 1) {
+			GPIO_ResetBits(GPIOC, Traffic_Green_Pin);
+			GPIO_SetBits(GPIOC, Traffic_Yellow_Pin);
+			xTimerChangePeriod(xLightTimer, 1000, 100);
+			xTimerStart(xLightTimer, 0);
+			global_light_color = 2;
+		}
+
+		//				Yellow light -> Red light
+		else if (global_light_color == 2) {
+		GPIO_ResetBits(GPIOC, Traffic_Yellow_Pin);
+		GPIO_SetBits(GPIOC, Traffic_Red_Pin);
+		xTimerChangePeriod(xLightTimer, 1500, 100);
 		xTimerStart(xLightTimer, 0);
-		global_light_color = 1;
+		global_light_color = 0;
+
+		}
+
+		if( xQueueSend( xQueue_handle, (void *) &Traffic, 1000)) {
+			vTaskDelay(1000);
+		} else {
+			printf("LIGHT_TIMER failed");
+		}
 	}
 
-	//				Green light -> Yellow light
-	else if (global_light_color == 1) {
-		GPIO_ResetBits(GPIOC, Traffic_Green_Pin);
-		GPIO_SetBits(GPIOC, Traffic_Yellow_Pin);
-		xTimerChangePeriod(xLightTimer, 1000, 100);
-		xTimerStart(xLightTimer, 0);
-		global_light_color = 2;
-	}
 
-	//				Yellow light -> Red light
-	else if (global_light_color == 2) {
-	GPIO_ResetBits(GPIOC, Traffic_Yellow_Pin);
-	GPIO_SetBits(GPIOC, Traffic_Red_Pin);
-	xTimerChangePeriod(xLightTimer, 1500, 100);
-	xTimerStart(xLightTimer, 0);
-	global_light_color = 0;
 
-	}
+
 }
 
 void System_Display_Task( void *pvParameters){
