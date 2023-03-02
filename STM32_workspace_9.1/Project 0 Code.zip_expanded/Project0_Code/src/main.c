@@ -205,10 +205,6 @@ TimerHandle_t			xLightTimer;
 //TimerHandle_t			Yellow_Light_TIMER;
 //TimerHandle_t			Green_Light_TIMER;
 
-SemaphoreHandle_t		xMutexFlow;
-SemaphoreHandle_t		xMutexTrafficLight;
-SemaphoreHandle_t		xMutexCarPosition;
-
 
 /*
  * TODO: Implement this function for any hardware specific clock configuration
@@ -218,11 +214,7 @@ void prvSetupHardware( void );
 void ShiftRegisterValuePreLight( uint16_t value );
 //static void Traffic_Flow_Task( void *pvParameters);
 static void Traffic_Generator_Task( void *pvParameters);
-static void Traffic_Light_State_Task( void *pvParameters);
 static void System_Display_Task( void *pvParameters);
-void Red_Timer_Callback( xTimerHandle xTimer);
-void Yellow_Timer_Callback( xTimerHandle xTimer);
-void Green_Timer_Callback( xTimerHandle xTimer);
 void LIGHT_TIMER_Callback( xTimerHandle xTimer);
 static void Manager_Task( void *pvParameters );
 void xxx(void);
@@ -275,7 +267,7 @@ int main(void)
 	xTaskCreate( System_Display_Task, "Display", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Display, NULL);
 
 //	Create the timer object
-	xLightTimer = xTimerCreate( "Traffic_Timer", 2000 / portTICK_PERIOD_MS, pdFALSE, (void *) 0, LIGHT_TIMER_Callback);
+	xLightTimer = xTimerCreate( "Traffic_Timer", 1000 / portTICK_PERIOD_MS, pdFALSE, (void *) 0, LIGHT_TIMER_Callback);
 //
 ////	Start the timer
 	xTimerStart( xLightTimer, 0);
@@ -295,7 +287,7 @@ static void Manager_Task( void *pvParameters ) {
 
 
 
-	int new[19] = {0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0};
+	int new[ARRAY_SIZE] = {0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0};
 	struct TRAFFIC_Struct Traffic_state;
 	Traffic_state.car = 0;
 	//Traffic_state.carArray = new;
@@ -359,39 +351,6 @@ void Traffic_Generator_Task(void *pvParameters){
 	}
 }
 
-//void Traffic_Light_State_Task( void *pvParameters){
-//
-//	struct TRAFFIC_Struct Traffic;
-//	printf("TRAFFIC_LIGHT_TASK: Start traffic lights \n");
-//
-//	while(1)
-//		if(xQueueReceive(xQueue_handle, &Traffic, 500)){
-//
-//		//		Retrieve flow value
-//		//		xQueueReceive( xQueue_handle, &(TRAFFIC_r), 500);
-//		//
-//		//		flowrate = TRAFFIC_r->flow;
-//		//		flowrate = 4;
-//		//		printf("GENERATOR_Task: Retrieved flow rate: %u. \n", flowrate);
-//			if(xTimerIsTimerActive( xLightTimer)) {
-//				xTimerStop(xLightTimer, 0);
-//				xTimerChangePeriod(xLightTimer, 1500, 100);
-//				xTimerStop(xLightTimer, 0);
-//			}
-//
-//			printf("TRAFFIC_LIGHT_TASK: Finish checking timer \n");
-//
-//
-//
-//			if( xQueueSend( xQueue_handle, (void *) &Traffic, 1000)) {
-//				vTaskDelay(1000);
-//			} else {
-//				printf("GENERATOR_Task failed");
-//			}
-//
-//		}
-//
-//}
 
 void LIGHT_TIMER_Callback(xTimerHandle xTimer){
 
@@ -400,7 +359,7 @@ void LIGHT_TIMER_Callback(xTimerHandle xTimer){
 	if( global_light_color == 0) {
 		GPIO_ResetBits(GPIOC, Traffic_Red_Pin);
 		GPIO_SetBits(GPIOC, Traffic_Green_Pin);
-		xTimerChangePeriod(xLightTimer, 1500, 100);
+		xTimerChangePeriod(xLightTimer, 3000, 100);
 		xTimerStart(xLightTimer, 0);
 		global_light_color = 1;
 	}
@@ -465,17 +424,28 @@ void Shift_Traffic( struct TRAFFIC_Struct *traffic) {
 			if(global_light_color == 1){
 				traffic->carArray[i] = traffic->carArray[i - 1];
 			}
+
 			// NOT GREEN
 			else {
 				// position 7 stops
+//				Shift if there is an empty spot
 				if (traffic->carArray[i] == 0){
 					traffic->carArray[i] = traffic->carArray[i-1];
 				}
+
+//				Light 0 stops blinking
+				else if (traffic->carArray[0] == 1){
+					traffic->carArray[0] = traffic->car;
+					traffic->car = 1;
+				}
+
 			}
 		} else {
 
 			traffic->carArray[i] = traffic->carArray[i - 1];
 		}
+
+
 		printf("SHIFT: Array: %i, Value: %i \n", i, traffic->carArray[i]);
 	}
 
@@ -498,6 +468,7 @@ void Display_Board( struct TRAFFIC_Struct *traffic){
 			for (int i = 0; i < 5; i++);
 			GPIO_SetBits(GPIOC, SHIFT_CLK_PIN);
 		}
+//		Write high bits
 		if (traffic->carArray[val] == 1) {
 			GPIO_SetBits(GPIOC, GPIO_Pin_6);
 			GPIO_ResetBits(GPIOC, SHIFT_CLK_PIN);
@@ -573,20 +544,16 @@ void prvSetupHardware(void)
 
 	GPIO_InitTypeDef  	GPIO_Init_Shift_1;
 	GPIO_InitTypeDef	GPIO_Init_Traffic;
-	//GPIO_InitTypeDef  GPIO_Init_Shift_2;
-	//GPIO_InitTypeDef  GPIO_Init_Shift_3;
-	//GPIO_InitTypeDef  GPIO_Init_Traffic;
 
 	/* Enable the GPIO_LED Clock */
 	RCC_AHB1PeriphClockCmd(LED_CLK_C, ENABLE);
-	//RCC_AHB1PeriphClockCmd(LED_CLK_A, ENABLE);
+	RCC_AHB1PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 
 //	Initialize Shift Registers GPIO
 	GPIO_Init_Shift_1.GPIO_Pin = GPIO_Pin_6 | SHIFT_CLK_PIN | GPIO_Pin_8 ;
 	GPIO_Init_Shift_1.GPIO_Mode = GPIO_Mode_OUT;
 	GPIO_Init_Shift_1.GPIO_OType = GPIO_OType_PP;
 	GPIO_Init_Shift_1.GPIO_PuPd = GPIO_PuPd_NOPULL;
-	//GPIO_Init_Shift_1.GPIO_Speed = GPIO_Speed_25MHz;
 	GPIO_Init(SHIFT1_REG_Port, &GPIO_Init_Shift_1);
 
 //	Initialize Traffic lights GPIO
@@ -594,9 +561,38 @@ void prvSetupHardware(void)
 	GPIO_Init_Traffic.GPIO_Mode = GPIO_Mode_OUT;
 	GPIO_Init_Traffic.GPIO_OType = GPIO_OType_PP;
 	GPIO_Init_Traffic.GPIO_PuPd = GPIO_PuPd_NOPULL;
-	//GPIO_Init_Shift_1.GPIO_Speed = GPIO_Speed_25MHz;
 	GPIO_Init(SHIFT1_REG_Port, &GPIO_Init_Traffic);
 
+
+//	Initialize ADC
+//	Enable Clock
+
+	RCC_AHB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC, ENABLE);
+
+//	Initialize GPIO
+	GPIO_InitTypeDef	GPIO_InitStruct;
+
+	GPIO_InitStruct.GPIO_Mode = GPIO_Mode_AN;
+	GPIO_InitStruct.GPIO_Pin = GPIO_Pin_3;
+	GPIO_InitStruct.GPIO_PuPd = GPIO_PuPd_NOPULL;
+	GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+//	Initialize ADC1
+	ADC_InitTypeDef ADC_InitStruct;
+
+	ADC_InitStruct.ADC_ContinuousConvMode = DISABLE;
+	ADC_InitStruct.ADC_DataAlign = ADC_DataAlign_Right;
+	ADC_InitStruct.ADC_ExternalTrigConv = DISABLE;
+	ADC_InitStruct.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_None;
+	ADC_InitStruct.ADC_Resolution = ADC_Resolution_12b;
+	ADC_InitStruct.ADC_NbrOfConversion = 1;
+	ADC_InitStruct.ADC_ScanConvMode = DISABLE;
+	ADC_Init(ADC1, &ADC_InitStruct);
+	ADC_Cmd(ADC1, ENABLE);
+
+//	Select Input Channel
+	ADC_RegularChannelConfig(ADC1, ADC_Channel_13, 1, ADC_SampleTime_84Cycles);
 
 
 	/* TODO: Setup the clocks, etc. here, if they were not configured before
