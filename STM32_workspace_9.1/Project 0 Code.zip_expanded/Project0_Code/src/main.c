@@ -200,10 +200,10 @@ uint16_t global_car_value;
 
 //TimerHandle_t			xTimer[3];
 //TimerHandle_t			xTimer[3];
-//TimerHandle_t			xTimer[3];
-TimerHandle_t			Red_Light_TIMER;
-TimerHandle_t			Yellow_Light_TIMER;
-TimerHandle_t			Green_Light_TIMER;
+TimerHandle_t			xLightTimer;
+//TimerHandle_t			Red_Light_TIMER;
+//TimerHandle_t			Yellow_Light_TIMER;
+//TimerHandle_t			Green_Light_TIMER;
 
 SemaphoreHandle_t		xMutexFlow;
 SemaphoreHandle_t		xMutexTrafficLight;
@@ -268,19 +268,17 @@ int main(void)
 	xQueue_handle = xQueueCreate( 1, sizeof( TRAFFIC_Init ));
 	printf("SIZE of struct: %u \n", sizeof( TRAFFIC_Init ));
 
-	xTaskCreate( Manager_Task, "Manager", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
+	xTaskCreate( Manager_Task, "Manager", configMINIMAL_STACK_SIZE, NULL, 5, NULL);
 //	xTaskCreate( Traffic_Flow_Task, "Flow", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Flow, NULL);
 	xTaskCreate( Traffic_Generator_Task, "Generator", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Create, NULL);
-	xTaskCreate( Traffic_Light_State_Task, "Light-State", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Light, NULL);
+//	xTaskCreate( Traffic_Light_State_Task, "Light-State", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Light, NULL);
 	xTaskCreate( System_Display_Task, "Display", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Display, NULL);
 
-	// Create timers for the traffic light
-//	Red_Light_TIMER = xTimerCreate( "Red_Light_Timer", 5000 / portTICK_PERIOD_MS, pdFALSE, ( void * ) 0, Red_Timer_Callback);
-//	Yellow_Light_TIMER = xTimerCreate( "Yellow_Light_Timer", 2000 / portTICK_PERIOD_MS, pdFALSE, ( void * ) 0, Yellow_Timer_Callback);
-//	Green_Light_TIMER = xTimerCreate( "Green_Light_Timer", 10000 / portTICK_PERIOD_MS, pdFALSE, ( void * ) 0, Green_Timer_Callback);
-
-//	xTimerStart( Green_Light_TIMER, 0);
-	xLightTimer = xTimerCreate( "Traffic_Timer", 2000/portTICK_PERIOD_MS, pdFalse, (void *) 0, LIGHT_TIMER_Callback);
+//	Create the timer object
+	xLightTimer = xTimerCreate( "Traffic_Timer", 2000 / portTICK_PERIOD_MS, pdFALSE, (void *) 0, LIGHT_TIMER_Callback);
+//
+////	Start the timer
+	xTimerStart( xLightTimer, 0);
 
 //	TRAFFIC_Init.light_state = 1;
 //	TRAFFIC_Init.flow = 4;
@@ -347,7 +345,7 @@ void Traffic_Generator_Task(void *pvParameters){
 
 	// 		Generate random number based on potentiometer
 //			car_value = (rand() % 10 + 1);
-			printf("GENERATOR_Task: Updated car value: %u. \n", car_value);
+			printf("GENERATOR_Task: Updated car value: %u. \n", Traffic.car);
 
 	//		Set car value to queue and send it back to the queue
 			Traffic.car = 1;
@@ -361,13 +359,70 @@ void Traffic_Generator_Task(void *pvParameters){
 	}
 }
 
-void Traffic_Light_State_Task( void *pvParameters){
-
-
-}
+//void Traffic_Light_State_Task( void *pvParameters){
+//
+//	struct TRAFFIC_Struct Traffic;
+//	printf("TRAFFIC_LIGHT_TASK: Start traffic lights \n");
+//
+//	while(1)
+//		if(xQueueReceive(xQueue_handle, &Traffic, 500)){
+//
+//		//		Retrieve flow value
+//		//		xQueueReceive( xQueue_handle, &(TRAFFIC_r), 500);
+//		//
+//		//		flowrate = TRAFFIC_r->flow;
+//		//		flowrate = 4;
+//		//		printf("GENERATOR_Task: Retrieved flow rate: %u. \n", flowrate);
+//			if(xTimerIsTimerActive( xLightTimer)) {
+//				xTimerStop(xLightTimer, 0);
+//				xTimerChangePeriod(xLightTimer, 1500, 100);
+//				xTimerStop(xLightTimer, 0);
+//			}
+//
+//			printf("TRAFFIC_LIGHT_TASK: Finish checking timer \n");
+//
+//
+//
+//			if( xQueueSend( xQueue_handle, (void *) &Traffic, 1000)) {
+//				vTaskDelay(1000);
+//			} else {
+//				printf("GENERATOR_Task failed");
+//			}
+//
+//		}
+//
+//}
 
 void LIGHT_TIMER_Callback(xTimerHandle xTimer){
 
+	printf("TRAFFIC_LIGHT_Callback: Start traffic callback \n");
+
+	if( global_light_color == 0) {
+		GPIO_ResetBits(GPIOC, Traffic_Red_Pin);
+		GPIO_SetBits(GPIOC, Traffic_Green_Pin);
+		xTimerChangePeriod(xLightTimer, 1500, 100);
+		xTimerStart(xLightTimer, 0);
+		global_light_color = 1;
+	}
+
+	//				Green light -> Yellow light
+	else if (global_light_color == 1) {
+		GPIO_ResetBits(GPIOC, Traffic_Green_Pin);
+		GPIO_SetBits(GPIOC, Traffic_Yellow_Pin);
+		xTimerChangePeriod(xLightTimer, 1000, 100);
+		xTimerStart(xLightTimer, 0);
+		global_light_color = 2;
+	}
+
+	//				Yellow light -> Red light
+	else if (global_light_color == 2) {
+	GPIO_ResetBits(GPIOC, Traffic_Yellow_Pin);
+	GPIO_SetBits(GPIOC, Traffic_Red_Pin);
+	xTimerChangePeriod(xLightTimer, 1500, 100);
+	xTimerStart(xLightTimer, 0);
+	global_light_color = 0;
+
+	}
 }
 
 void System_Display_Task( void *pvParameters){
@@ -381,7 +436,7 @@ void System_Display_Task( void *pvParameters){
 			printf("DISPLAY_TASK: Grabbing value from queue \n");
 			Shift_Traffic(&Traffic_state);
 
-			Display_Board(Traffic_state);
+			Display_Board(&Traffic_state);
 
 			if(xQueueSend(xQueue_handle, &Traffic_state, 1000)) {
 				vTaskDelay(500);
@@ -429,7 +484,7 @@ void Shift_Traffic( struct TRAFFIC_Struct *traffic) {
 
 }
 
-void Display_Board( struct TRAFFIC_Struct traffic){
+void Display_Board( struct TRAFFIC_Struct *traffic){
 
 	GPIO_ResetBits(GPIOC, SHIFT_RESET_PIN);
 	for (int i = 0; i < 10; i++);
@@ -437,13 +492,13 @@ void Display_Board( struct TRAFFIC_Struct traffic){
 
 	for (int val = ARRAY_SIZE - 1; val >= 0; val--) {
 //		Write low bits
-		if (traffic.carArray[val] == 0) {
+		if (traffic->carArray[val] == 0) {
 			GPIO_ResetBits(GPIOC, GPIO_Pin_6);
 			GPIO_ResetBits(GPIOC, SHIFT_CLK_PIN);
 			for (int i = 0; i < 5; i++);
 			GPIO_SetBits(GPIOC, SHIFT_CLK_PIN);
 		}
-		if (traffic.carArray[val] == 1) {
+		if (traffic->carArray[val] == 1) {
 			GPIO_SetBits(GPIOC, GPIO_Pin_6);
 			GPIO_ResetBits(GPIOC, SHIFT_CLK_PIN);
 			for (int i = 0; i < 5; i++);
@@ -456,307 +511,6 @@ void Display_Board( struct TRAFFIC_Struct traffic){
 }
 
 /*-----------------------------------------------------------*/
-
-
-// Traffic Light Task
-/*-----------------------------------------------------------*/
-
-//void Red_Timer_Callback( xTimerHandle xTimer) {
-//	// Red light off, green light on
-//	printf("Red light off, green light on\n");
-//	GPIO_ResetBits( GPIOC, Traffic_Red_Pin);
-//	GPIO_SetBits( GPIOC, Traffic_Green_Pin);
-//	struct TRAFFIC_Struct TRAFFIC_State;
-//
-//	TRAFFIC_State.light_state = 1;
-//	xQueueSend( xQueue_handle, (void *) &TRAFFIC_State, 1000);
-//
-//	// Use semaphore to update global light color to green
-////	if( xSemaphoreTake( xMutexTrafficLight, (TickType_t) 0) == pdTRUE ) {
-////
-//////		global_light_color = 1;
-////		xSemaphoreGive( xMutexTrafficLight);
-////	}
-////	else {
-////		printf("Semaphore not available \n");
-////	}
-//
-//	xTimerStart( Green_Light_TIMER, 0);
-//
-//
-//}
-//
-//void Green_Timer_Callback( xTimerHandle xTimer) {
-//	// Green light off, yellow light on
-//	printf("Green light off, yellow light on\n");
-//	GPIO_ResetBits( GPIOC, Traffic_Green_Pin);
-//	GPIO_SetBits( GPIOC, Traffic_Yellow_Pin);
-//	struct TRAFFIC_Struct TRAFFIC_State;
-//
-//	TRAFFIC_State.light_state = 0;
-//	xQueueSend( xQueue_handle, (void *) &TRAFFIC_State, 1000);
-//
-//	//		global_light_color = 0;
-////			xSemaphoreGive( xMutexTrafficLight);
-//	// Use semaphore to update global light color to red through yellow
-////	if( xSemaphoreTake( xMutexTrafficLight, (TickType_t) 0) == pdTRUE ) {
-////
-////	}
-////	else {
-////		printf("Semaphore not available \n");
-////	}
-//
-//	xTimerStart( Yellow_Light_TIMER, 0);
-//}
-//
-//void Yellow_Timer_Callback( xTimerHandle xTimer) {
-//	printf("Yellow light off, red light on\n");
-//	GPIO_ResetBits( GPIOC, Traffic_Yellow_Pin);
-//	GPIO_SetBits( GPIOC, Traffic_Red_Pin);
-//
-//	xTimerStart( Red_Light_TIMER, 0);
-//}
-//
-//void Traffic_Light_State_Task( void *pvParameters) {
-//
-//	uint16_t current_speed = 4;
-//	uint16_t new_speed = 0;;
-//
-//	while(1) {
-//
-////		if( xSemaphoreTake( xMutexFlow, (TickType_t) 10) == pdTRUE) {
-////			new_speed = global_flowrate;
-////		}
-////
-////		else {
-////			printf("Semaphore not available \n");
-////		}
-//
-//		if(xTimerIsTimerActive( Green_Light_TIMER)) {
-//			xTimerStop(Green_Light_TIMER, 0);
-//			xTimerChangePeriod(Green_Light_TIMER, (5000 + 2000 * (8 - new_speed)) / portTICK_PERIOD_MS, 0);
-//			xTimerChangePeriod(Red_Light_TIMER, (2000 + 1500 * (8 - new_speed)) / portTICK_PERIOD_MS, 0);
-//			xTimerStop(Red_Light_TIMER, 0);
-//		}
-//
-//		else if(xTimerIsTimerActive( Green_Light_TIMER)) {
-//			xTimerChangePeriod(Green_Light_TIMER, (5000 + 2000 * (8 - new_speed)) / portTICK_PERIOD_MS, 0);
-//			xTimerStop(Green_Light_TIMER, 0);
-//			xTimerChangePeriod(Red_Light_TIMER, (2000 + 1500 * (8 - new_speed)) / portTICK_PERIOD_MS, 0);
-//			xTimerStop(Red_Light_TIMER, 0);
-//		}
-//
-//		else if(xTimerIsTimerActive( Green_Light_TIMER)) {
-//			xTimerStop(Red_Light_TIMER, 0);
-//			xTimerChangePeriod(Green_Light_TIMER, (5000 + 2000 * (8 - new_speed)) / portTICK_PERIOD_MS, 0);
-//			xTimerStop(Green_Light_TIMER, 0);
-//			xTimerChangePeriod(Red_Light_TIMER, (2000 + 1500 * (8 - new_speed)) / portTICK_PERIOD_MS, 0);
-//		}
-//
-////		if(current_speed != new_speed) {
-////		}
-//
-////		current_speed = new_speed;
-//
-//	}
-//}
-//
-///*-----------------------------------------------------------*/
-
-// System Display Task
-/*-----------------------------------------------------------*/
-
-//void System_Display_Task( void *pvParameters) {
-//	uint16_t car_value;
-//	struct TRAFFIC_Struct *TRAFFIC_Received;
-//	uint16_t light_color = 1;
-//
-//	uint32_t newlighttraffic[19] = {0};
-//	uint32_t currlighttraffic[19] = {0};
-//
-//	//reset(Clear)
-////	GPIO_ResetBits(GPIOC, GPIO_Pin_8);
-////	for (int i=0; i<10; i++){
-////
-////	}
-////	GPIO_SetBits(GPIOC, GPIO_Pin_8);
-//
-//	while(1){
-//		vTaskDelay(100);
-//
-////		If Green light displays
-//		if( light_color == 1) {
-//			car_value = 1;
-//			newlighttraffic[0] = car_value;
-//
-//			for (uint16_t i = 1; i < 18; i++) {
-//				newlighttraffic[i] = currlighttraffic[i - 1];
-//			}
-//		}
-//
-////		If Red light displays
-//		if( light_color == 0){
-//
-//			uint16_t emptyQueue = 0;
-//			uint16_t lowemptyQueue = 0;
-//
-//			for(uint16_t i = 18; i>= 1; i--){
-//
-//				if(currlighttraffic[i] == 0 && emptyQueue == 0){
-//					emptyQueue = 1;
-//					//newlighttraffic[0] = car_value;//set first light here
-//				}
-//
-////				Cars after traffic light
-//				if( i > 7){
-//
-//					if(emptyQueue == 1) {
-//						newlighttraffic[i] = currlighttraffic[i -1];
-//					}
-//					else {
-//						newlighttraffic[i] = currlighttraffic[i];
-//					}
-//
-//				}
-//
-//
-//				else {
-//
-//					//first 8 lights
-//					if( currlighttraffic[i] == 0 && lowemptyQueue == 0) {
-//						lowemptyQueue = 1;
-//						newlighttraffic[0] = car_value;//set first light here
-//					}
-//
-//					if(lowemptyQueue == 1) {
-//						newlighttraffic[i] = currlighttraffic[i -1];
-//					}
-//					else {
-//						newlighttraffic[i] = currlighttraffic[i];
-//					}
-//
-//
-//
-//				}
-//
-//			}
-//		}
-//
-//		for (uint16_t i = 18; i >= 0; i--) {
-//
-//			ShiftRegisterValuePreLight(newlighttraffic[i]);
-//
-//					for(int i = 0; i>10; i++)
-//					{}
-//		}
-//
-//		vTaskDelay(500);
-//		if( xQueueReceive(xQueue_handle, &(TRAFFIC_Received), 500)) {
-//			car_value = TRAFFIC_Received->car;
-////			xSemaphoreGive( xMutexCarPosition);
-//			printf("DisplayTask: Accessed xMutexCars, updated local car_value:  %u. \n", car_value );
-//		}
-////		if(xSemaphoreTake( xMutexCarPosition, ( TickType_t) 10) == pdTRUE) {
-////
-////
-////
-////
-////		}
-////		else {
-////			printf("Mutex Car Unavailable \n");
-////		}
-//
-//		if( xQueueReceive(xQueue_handle, &(TRAFFIC_Received), 500)) {
-//			light_color = TRAFFIC_Received->light_state;
-////			xSemaphoreGive( xMutexTrafficLight);
-//			printf("DisplayTask: Accessed:  %u. \n", light_color );
-//
-//			if( light_color == 1) {
-//	//			Green light
-//				//ShiftRegisterValuePreLight(car_value);
-//				car_value = 1;
-//				newlighttraffic[0] = car_value;
-//
-//				for (uint16_t i = 1; i < 18; i++) {
-//					newlighttraffic[i] = currlighttraffic[i - 1];
-//				}
-//			}
-//
-//			else if (light_color == 0) {
-//	//			Red light
-//
-//				uint16_t emptyQueue = 0;
-//				uint16_t lowemptyQueue = 0;
-//
-//				for(uint16_t i = 18; i>= 1; i--){
-//
-//					if(currlighttraffic[i] == 0 && emptyQueue == 0){
-//						emptyQueue = 1;
-//						//newlighttraffic[0] = car_value;//set first light here
-//					}
-//
-//					if(i>7){
-//						if(emptyQueue == 1) {
-//							newlighttraffic[i] = currlighttraffic[i -1];
-//						}
-//						else {
-//							newlighttraffic[i] = currlighttraffic[i];
-//						}
-//
-//					}
-//
-//
-//					else{
-//
-//						//first 8 lights
-//						if(currlighttraffic[i] == 0 && lowemptyQueue == 0){
-//							lowemptyQueue = 1;
-//							newlighttraffic[0] = car_value;//set first light here
-//						}
-//
-//						if(lowemptyQueue == 1) {
-//							newlighttraffic[i] = currlighttraffic[i -1];
-//						}
-//						else {
-//							newlighttraffic[i] = currlighttraffic[i];
-//						}
-//
-//
-//
-//					}
-//
-//				}
-//
-//			}
-//
-//
-//			for (uint16_t i = 18; i >= 0; i--) {
-//
-//				ShiftRegisterValuePreLight(newlighttraffic[i]);
-//
-//						for(int i = 0; i>10; i++)
-//						{}
-//			}
-//		}
-//
-////		if(xSemaphoreTake( xMutexTrafficLight, ( TickType_t) 0) == pdTRUE) {
-////
-////
-////
-////		}
-////		else {
-////			printf("Mutex Light Unavailable \n");
-////		}
-//
-//
-//
-////		for (uint32_t i = 0; i < 8; i++) {
-////			currlighttraffic[i] = newlighttraffic[i];
-////		}
-//
-//	}
-//
-//}
 
 
 /*-----------------------------------------------------------*/
@@ -827,6 +581,7 @@ void prvSetupHardware(void)
 	RCC_AHB1PeriphClockCmd(LED_CLK_C, ENABLE);
 	//RCC_AHB1PeriphClockCmd(LED_CLK_A, ENABLE);
 
+//	Initialize Shift Registers GPIO
 	GPIO_Init_Shift_1.GPIO_Pin = GPIO_Pin_6 | SHIFT_CLK_PIN | GPIO_Pin_8 ;
 	GPIO_Init_Shift_1.GPIO_Mode = GPIO_Mode_OUT;
 	GPIO_Init_Shift_1.GPIO_OType = GPIO_OType_PP;
@@ -834,6 +589,7 @@ void prvSetupHardware(void)
 	//GPIO_Init_Shift_1.GPIO_Speed = GPIO_Speed_25MHz;
 	GPIO_Init(SHIFT1_REG_Port, &GPIO_Init_Shift_1);
 
+//	Initialize Traffic lights GPIO
 	GPIO_Init_Traffic.GPIO_Pin = Traffic_Green_Pin | Traffic_Red_Pin | Traffic_Yellow_Pin;
 	GPIO_Init_Traffic.GPIO_Mode = GPIO_Mode_OUT;
 	GPIO_Init_Traffic.GPIO_OType = GPIO_OType_PP;
@@ -843,73 +599,6 @@ void prvSetupHardware(void)
 
 
 
-//	GPIO_Init_Shift_2.GPIO_Pin = SHIFT2_REG_PIN | SHIFT2_CLK_PIN;
-//	GPIO_Init_Shift_2.GPIO_Mode = GPIO_Mode_OUT;
-//	GPIO_Init_Shift_2.GPIO_OType = GPIO_OType_PP;
-//	GPIO_Init_Shift_2.GPIO_PuPd = GPIO_PuPd_NOPULL;
-//	//GPIO_Init_Shift_2.GPIO_Speed = GPIO_Speed_25MHz;
-//	GPIO_Init(SHIFT2_REG_Port, &GPIO_Init_Shift_2);
-//
-
-
 	/* TODO: Setup the clocks, etc. here, if they were not configured before
 	main() was called. */
-}
-
-//void ShiftRegisterValuePreLight(uint16_t value) //uint16_t
-//{
-//	if (value == 0){
-//		GPIO_ResetBits(GPIOC, SHIFT1_REG_PIN);
-//
-//	}else{
-//		GPIO_SetBits(GPIOC, SHIFT1_REG_PIN);
-//	}
-//	GPIO_SetBits(GPIOC, SHIFT1_CLK_PIN);
-//	GPIO_ResetBits(GPIOC, SHIFT1_CLK_PIN);
-//}
-
-void xxx(void){
-//uint16_t newactiveprelighttraffic[8] = {0};
-//	while (1)
-//	{
-//
-//	//reset(Clear)
-//	GPIO_ResetBits(GPIOC, GPIO_Pin_8);
-//	for (int i=0; i<10; i++){
-//
-//	}
-//	GPIO_SetBits(GPIOC, GPIO_Pin_8);
-//
-//	uint32_t newactiveprelighttrafficoff[24] = {0};
-//	uint16_t car_value = 0;
-//
-//	for (uint16_t i=0; i<24; i++){
-//		newactiveprelighttrafficoff[i] = car_value;
-//	}
-//
-//	for (uint16_t i=23; i>0; i--){
-//		ShiftRegisterValuePreLight(newactiveprelighttrafficoff[i]);
-//
-//		for(int i = 0; i>10; i++)
-//		{}
-//	}
-//
-//	uint32_t newactiveprelighttraffic[24] = {0};
-//	car_value = 1;
-//
-//	for (uint16_t i=0; i<24; i++){
-//		newactiveprelighttraffic[i] = car_value;
-//	}
-//
-//	for (uint16_t i=23; i>0; i--){
-//		ShiftRegisterValuePreLight(newactiveprelighttraffic[i]);
-//
-//		for(int i = 0; i>10; i++)
-//		{}
-//	}
-//
-//
-//
-//
-//	}
 }
