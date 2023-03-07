@@ -164,22 +164,6 @@ functionality.
 #define SHIFT_CLK_PIN		GPIO_Pin_7
 #define SHIFT_RESET_PIN		GPIO_Pin_8
 
-//#define SHIFT2_REG_Port		GPIOC
-//#define SHIFT2_REG_PIN		GPIO_PIN_6
-//#define SHIFT2_CLK_PIN		GPIO_PIN_7
-//
-//#define SHIFT3_REG_Port		GPIOC
-//#define SHIFT3_REG_PIN		GPIO_PIN_6
-//#define SHIFT3_CLK_PIN		GPIO_PIN_7
-//
-//#define SHIFT1_PIN_2	GPIO_PIN_6
-//#define SHIFT1_PIN_3	GPIO_PIN_6
-//#define SHIFT1_PIN_4	GPIO_PIN_6
-//#define SHIFT1_PIN_5	GPIO_PIN_6
-//#define SHIFT1_PIN_6	GPIO_PIN_6
-//#define SHIFT1_PIN_7	GPIO_PIN_6
-//#define SHIFT1_PIN_8	GPIO_PIN_6
-
 #define Prio_Task_Traffic_Flow		( tskIDLE_PRIORITY + 1 )
 #define Prio_Task_Traffic_Create	( tskIDLE_PRIORITY + 2 )
 #define Prio_Task_Traffic_Light		( tskIDLE_PRIORITY + 2 )
@@ -187,37 +171,20 @@ functionality.
 
 
 #define LED_CLK_C RCC_AHB1Periph_GPIOC
-// Can't use global variables
-
-// Initialize global variables
-// Global light color 0: red, 1: green
-uint16_t global_flowrate;
-uint16_t global_light_color = 1;
-uint16_t global_car_value;
 
 
-
-
-//TimerHandle_t			xTimer[3];
-//TimerHandle_t			xTimer[3];
 TimerHandle_t			xLightTimer;
-//TimerHandle_t			Red_Light_TIMER;
-//TimerHandle_t			Yellow_Light_TIMER;
-//TimerHandle_t			Green_Light_TIMER;
-
 
 /*
  * TODO: Implement this function for any hardware specific clock configuration
  * that was not already performed before main() was called.
  */
 void prvSetupHardware( void );
-void ShiftRegisterValuePreLight( uint16_t value );
 static void Traffic_Flow_Task( void *pvParameters);
 static void Traffic_Generator_Task( void *pvParameters);
 static void System_Display_Task( void *pvParameters);
 void LIGHT_TIMER_Callback( xTimerHandle xTimer);
 static void Manager_Task( void *pvParameters );
-void xxx(void);
 
 /*
  * The queue send and receive tasks as described in the comments at the top of
@@ -250,10 +217,9 @@ int main(void)
 	xTaskCreate( Manager_Task, "Manager", configMINIMAL_STACK_SIZE, NULL, 5, NULL);
 	xTaskCreate( Traffic_Flow_Task, "Flow", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Flow, NULL);
 	xTaskCreate( Traffic_Generator_Task, "Generator", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Create, NULL);
-//	xTaskCreate( Traffic_Light_State_Task, "Light-State", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Light, NULL);
 	xTaskCreate( System_Display_Task, "Display", configMINIMAL_STACK_SIZE, NULL, Prio_Task_Traffic_Display, NULL);
 
-//	Create the timer object
+//	Create the timer object for the traffic lights
 	xLightTimer = xTimerCreate( "Traffic_Timer", 100 / portTICK_PERIOD_MS, pdFALSE, (void *) 0, LIGHT_TIMER_Callback);
 
 //	Start the timer
@@ -277,7 +243,6 @@ static void Manager_Task( void *pvParameters ) {
 		printf("MANAGER: Array: %i, Value: %i \n", i, Traffic_state.carArray[i]);
 	}
 
-	//Traffic_state.carArray = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	Traffic_state.light_state = 1;
 	if(xQueueSend(xQueue_handle, &Traffic_state, 1000)) {
 		printf("MANAGER: Sending data to queue \n");
@@ -297,8 +262,6 @@ void Traffic_Flow_Task(void *pvParameters){
 
 	uint16_t adc_val = 0;
 	uint16_t speed_val = 0;
-	uint16_t current_speed_val = 0;
-	uint16_t speed_change;
 	struct TRAFFIC_Struct Traffic;
 
 	while(1) {
@@ -310,39 +273,16 @@ void Traffic_Flow_Task(void *pvParameters){
 			while(!ADC_GetFlagStatus(ADC1, ADC_FLAG_EOC));
 
 			adc_val = ADC_GetConversionValue(ADC1);
-			printf("TRAFFIC_FLOW_TASK: ADC value: %u \n", adc_val);
 
+//			ADC value returns around 3900 - 4096 maximum, therefore need a division. Use 512 since it's 2^9
 			speed_val = adc_val / 512;
 
-			if(speed_val == 8){
-
-				speed_val = 7;
-			}
-
-			speed_change = abs(speed_val - current_speed_val);
-
-			if(speed_change != 0) {
-
-				current_speed_val = speed_val;
-			}
 			printf("TRAFFIC_FLOW_TASK: Speed value: %u \n", speed_val);
 
 			Traffic.flow = speed_val;
-	//		Retrieve flow value
-	//		xQueueReceive( xQueue_handle, &(TRAFFIC_r), 500);
-	//
-	//		flowrate = TRAFFIC_r->flow;
-	//		flowrate = 4;
-	//		printf("GENERATOR_Task: Retrieved flow rate: %u. \n", flowrate);
 
-
-	// 		Generate random number based on potentiometer
-//			car_value = (rand() % 10 + 1);
-			printf("GENERATOR_Task: Updated car value: %u. \n", Traffic.car);
-
-	//		Set car value to queue and send it back to the queue
 			if( xQueueSend( xQueue_handle, (void *) &Traffic, 1000)) {
-				vTaskDelay(1000);
+				vTaskDelay(500);
 			} else {
 				printf("GENERATOR_Task failed");
 			}
@@ -371,19 +311,40 @@ void Traffic_Generator_Task(void *pvParameters){
 	//		Retrieve flow value
 	//		xQueueReceive( xQueue_handle, &(TRAFFIC_r), 500);
 	//
-	//		flowrate = TRAFFIC_r->flow;
-	//		flowrate = 4;
-	//		printf("GENERATOR_Task: Retrieved flow rate: %u. \n", flowrate);
+			flowrate = Traffic.flow;
+			printf("GENERATOR_Task: Retrieved flow rate: %u. \n", flowrate);
 
 
 	// 		Generate random number based on potentiometer
-//			car_value = (rand() % 10 + 1);
-			printf("GENERATOR_Task: Updated car value: %u. \n", Traffic.car);
+			car_value = (rand() % 10);
+			printf("GENERATOR_Task: Updated car value: %u. \n", car_value);
 
-	//		Set car value to queue and send it back to the queue
-			Traffic.car = 1;
+//			low traffic
+//			Create large gaps between cars
+			if (flowrate < 3) {
+				if (car_value > 7) {
+					Traffic.car = 1;
+				}
+			}
+
+	//		med traffic
+//			Create occasional gaps between cars
+			else if (flowrate >= 3 && flowrate <= 5) {
+				if (car_value > 5) {
+					Traffic.car = 1;
+				}
+			}
+
+	//		high traffic
+//			Bumper to bumper cars
+			else if (flowrate > 5){
+				Traffic.car = 1;
+			}
+
+			printf("Traffic->car set to %d \n", Traffic.car);
+
 			if( xQueueSend( xQueue_handle, (void *) &Traffic, 1000)) {
-				vTaskDelay(1000);
+				vTaskDelay(500);
 			} else {
 				printf("GENERATOR_Task failed");
 			}
@@ -396,6 +357,8 @@ void Traffic_Generator_Task(void *pvParameters){
 void LIGHT_TIMER_Callback(xTimerHandle xTimer){
 	struct TRAFFIC_Struct Traffic;
 	uint16_t flowrate;
+	int green_tick;
+	int red_tick;
 
 	printf("TRAFFIC_LIGHT_Callback: Start traffic callback \n");
 
@@ -404,35 +367,54 @@ void LIGHT_TIMER_Callback(xTimerHandle xTimer){
 		flowrate = Traffic.flow;
 		printf("TRAFFIC_LIGHT_Callback: Speed value: %u \n", flowrate);
 
+
+//		low traffic
+//		red light is twice as longer than green light
+		if (flowrate < 3) {
+			green_tick = 2000;
+			red_tick = 4000;
+		}
+
+//		med traffic
+//		green light is as long as red light
+		else if (flowrate >= 3 && flowrate <= 5) {
+			green_tick = 3000;
+			red_tick = 3000;
+		}
+
+//		high traffic
+//		green light is twice as longer than red light
+		else if (flowrate > 5){
+			green_tick = 4000;
+			red_tick = 2000;
+		}
+
 		//				Red light -> Green light
-		if( global_light_color == 0) {
+		if( Traffic.light_state == 0) {
 			GPIO_ResetBits(GPIOC, Traffic_Red_Pin);
 			GPIO_SetBits(GPIOC, Traffic_Green_Pin);
-			xTimerChangePeriod(xLightTimer, 150 * (8 + flowrate) / portTICK_PERIOD_MS, 100);
+			xTimerChangePeriod(xLightTimer, green_tick, 100);
 			xTimerStart(xLightTimer, 0);
 			Traffic.light_state = 1;
-			global_light_color = 1;
 		}
 
 		//				Green light -> Yellow light
-		else if (global_light_color == 1) {
+		else if (Traffic.light_state == 1) {
 			GPIO_ResetBits(GPIOC, Traffic_Green_Pin);
 			GPIO_SetBits(GPIOC, Traffic_Yellow_Pin);
 			xTimerChangePeriod(xLightTimer, 1000, 100);
 			xTimerStart(xLightTimer, 0);
 			Traffic.light_state = 2;
-			global_light_color = 2;
 		}
 
 
-		//				Yellow light -> Red light
-		else if (global_light_color == 2) {
+//				Yellow light -> Red light
+		else if (Traffic.light_state == 2) {
 		GPIO_ResetBits(GPIOC, Traffic_Yellow_Pin);
 		GPIO_SetBits(GPIOC, Traffic_Red_Pin);
-		xTimerChangePeriod(xLightTimer, 150 * (8 - flowrate) / portTICK_PERIOD_MS, 100);
+		xTimerChangePeriod(xLightTimer, red_tick , 100);
 		xTimerStart(xLightTimer, 0);
 		Traffic.light_state = 0;
-		global_light_color = 0;
 
 		}
 
@@ -456,7 +438,7 @@ void System_Display_Task( void *pvParameters){
 
 		if(xQueueReceive(xQueue_handle, &Traffic_state, 500)) {
 
-			printf("DISPLAY_TASK: Light state = %u \n", Traffic_state.light_state);
+//			printf("DISPLAY_TASK: Light state = %u \n", Traffic_state.light_state);
 			Shift_Traffic(&Traffic_state, Traffic_state.light_state);
 
 			Display_Board(&Traffic_state);
@@ -472,13 +454,12 @@ void System_Display_Task( void *pvParameters){
 
 void Shift_Traffic( struct TRAFFIC_Struct *traffic, uint16_t Light_state) {
 //	shift all lights
-	printf("SHIFT: Light state = %u \n", Light_state);
+//	printf("SHIFT: Light state = %u \n", Light_state);
 	for(int i = 18; i > 0; i--) {
 
 //		Red light and check if light 8 is on
-		if (i == 8 && global_light_color != 1) {
+		if (i == 8 && Light_state != 1) {
 			// handle not green case
-			printf("SHIFT: Red light! \n");
 			traffic->carArray[i] = 0;
 			continue;
 		}
@@ -487,36 +468,29 @@ void Shift_Traffic( struct TRAFFIC_Struct *traffic, uint16_t Light_state) {
 		if( i <= 7) {
 
 			// if light is green just shift normally
-			if(global_light_color == 1){
-				printf("SHIFT: Green light! \n");
+			if(Light_state == 1){
 				traffic->carArray[i] = traffic->carArray[i - 1];
+				traffic->carArray[i-1] = 0;
 			}
 
 			// NOT GREEN
 			else {
 				// position 7 stops
-//				Shift if there is an empty spot
 				if (traffic->carArray[i] == 0){
 					traffic->carArray[i] = traffic->carArray[i-1];
+					traffic->carArray[i-1] = 0;
 				}
-
-//				Light 0 stops blinking
-				else if (traffic->carArray[0] == 1){
-					traffic->carArray[0] = traffic->car;
-					traffic->car = 1;
-				}
-
 			}
 		} else {
 
 			traffic->carArray[i] = traffic->carArray[i - 1];
 		}
 
-
-//		printf("SHIFT: Array: %i, Value: %i \n", i, traffic->carArray[i]);
 	}
 
-	traffic->carArray[0] = traffic->car;
+	if (traffic->carArray[0] == 0){
+		traffic->carArray[0] = traffic->car;
+	}
 	traffic->car = 0;
 
 }
