@@ -410,11 +410,11 @@ void LIGHT_TIMER_Callback(xTimerHandle xTimer){
 
 //				Yellow light -> Red light
 		else if (Traffic.light_state == 2) {
-		GPIO_ResetBits(GPIOC, Traffic_Yellow_Pin);
-		GPIO_SetBits(GPIOC, Traffic_Red_Pin);
-		xTimerChangePeriod(xLightTimer, red_tick , 100);
-		xTimerStart(xLightTimer, 0);
-		Traffic.light_state = 0;
+			GPIO_ResetBits(GPIOC, Traffic_Yellow_Pin);
+			GPIO_SetBits(GPIOC, Traffic_Red_Pin);
+			xTimerChangePeriod(xLightTimer, red_tick , 100);
+			xTimerStart(xLightTimer, 0);
+			Traffic.light_state = 0;
 
 		}
 
