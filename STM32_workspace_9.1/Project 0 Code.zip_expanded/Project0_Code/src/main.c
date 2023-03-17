@@ -173,9 +173,13 @@ static void prvSetupHardware( void );
  * this file.
  */
 
+static void Task1_Callback(xTimerHandle pxTimer);
+static void Task2_Callback(xTimerHandle pxTimer);
+static void Task3_Callback(xTimerHandle pxTimer);
+
 static void DD_Task_Generator( void *pvParameters);
 
-typedef enum task_type {PERIODIC, APERIODIC} task_type;
+typedef enum {PERIODIC, APERIODIC} task_type;
 
 typedef struct dd_task {
 	TaskHandle_t t_handle;
@@ -183,15 +187,15 @@ typedef struct dd_task {
 	uint32_t task_id;
 	uint32_t release_time;
 	uint32_t absolute_deadline;
+	uint32_t execution_time;
 	uint32_t completion_time;
 };
 
-struct dd_task_list {
+typedef struct dd_task_list {
 	struct dd_task task;
 	struct dd_task_list *next_task;
 };
 
-void create_dd_task( TaskHandle_t t_handle, uint32_t type, uint32_t task_id, uint32_t absolute_deadline);
 
 void delete_dd_task(uint32_t task_id);
 
@@ -200,9 +204,12 @@ void delete_dd_task(uint32_t task_id);
 xQueueHandle xQueue_handle = 0;
 
 
+xQueueHandle xQueue_Generator = 0;
 
 
-
+xTimerHandle Task1_Release_Timer = 0;
+xTimerHandle Task2_Release_Timer = 0;
+xTimerHandle Task3_Release_Timer = 0;
 
 /*-----------------------------------------------------------*/
 
@@ -225,10 +232,18 @@ int main(void)
 	xQueue_handle = xQueueCreate( 	mainQUEUE_LENGTH,		/* The number of items the queue can hold. */
 							sizeof( uint16_t ) );	/* The size of each item the queue holds. */
 
+	xQueue_Generator = xQueueCreate( 100, sizeof( uint32_t));
+
 	/* Add to the registry, for the benefit of kernel aware debugging. */
 	vQueueAddToRegistry( xQueue_handle, "MainQueue" );
 
+	vQueueAddToRegistry( xQueue_Generator, "Generator Queue");
+
 	xTaskCreate( DD_Task_Generator, "Generate", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
+
+	Task1_Release_Timer = xTimerCreate( "Task 1 timer", pdMS_TO_TICKS(500), pdTRUE, (void *) 0, Task1_Callback);
+	Task2_Release_Timer = xTimerCreate( "Task 2 timer", pdMS_TO_TICKS(500), pdTRUE, (void *) 0, Task2_Callback);
+	Task3_Release_Timer = xTimerCreate( "Task 3 timer", pdMS_TO_TICKS(500), pdTRUE, (void *) 0, Task3_Callback);
 
 	/* Start the tasks and timer running. */
 	vTaskStartScheduler();
@@ -239,11 +254,36 @@ int main(void)
 
 /*-----------------------------------------------------------*/
 
-static void DD_Task_Generator( void *pvParameters) {
+
+void DD_Task_Generator( void *pvParameters ){
+
+	TaskHandle_t Task1_Handle = NULL;
+	TaskHandle_t Task2_Handle = NULL;
+	TaskHandle_t Task3_Handle = NULL;
+
+	xTimerStart( Task1_Release_Timer, 500);
+	xTimerStart( Task2_Release_Timer, 500);
+	xTimerStart( Task3_Release_Timer, 500);
+
+	Task1_Callback( Task1_Release_Timer);
+	Task2_Callback( Task2_Release_Timer);
+	Task3_Callback( Task3_Release_Timer);
+
 
 	while(1){
-
+		xQueueReceive( xQueue_Generator, )
 	}
+}
+
+static void Task1_Callback(xTimerHandle pxTimer){
+
+}
+
+static void Task2_Callback(xTimerHandle pxTimer){
+
+}
+
+static void Task3_Callback(xTimerHandle pxTimer){
 
 }
 
@@ -255,10 +295,16 @@ void create_dd_task( TaskHandle_t t_handle, uint32_t type, uint32_t task_id, uin
 	new_dd_task.task_id = task_id;
 	new_dd_task.absolute_deadline = absolute_deadline;
 
-	if( !xQueueSend(xQueue_handle, &new_dd_task, 100)) {
-		printf("Create DD Task failed.\n");
-	}
+	release_dd_task(&new_dd_task);
 
+
+}
+
+void release_dd_task( struct dd_task *new_task){
+
+	if( !xQueueSend(xQueue_handle, &new_task, 100)) {
+			printf("Create DD Task failed.\n");
+		}
 }
 
 
