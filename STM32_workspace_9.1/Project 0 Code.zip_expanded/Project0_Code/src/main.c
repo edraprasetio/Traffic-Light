@@ -57,6 +57,8 @@ typedef struct dd_task {
 	uint32_t absolute_deadline;
 	uint32_t execution_time;
 	uint32_t completion_time;
+	uint32_t message;
+
 };
 
 typedef struct dd_task_list {
@@ -70,6 +72,9 @@ void delete_dd_task(uint32_t task_id);
 xQueueHandle xQueue_Generator = 0;
 xQueueHandle xQueue_DDS = 0;
 xQueueHandle xQueue_Monitor = 0;
+
+xQueueHandle xQueue_create_task = 0;
+xQueueHandle xQueue_create_task_message = 0;
 
 xTimerHandle Task1_Release_Timer = 0;
 xTimerHandle Task2_Release_Timer = 0;
@@ -97,10 +102,16 @@ int main(void)
 	xQueue_DDS = xQueueCreate( 100, sizeof( uint32_t));
 	xQueue_Monitor = xQueueCreate( 100, sizeof( uint32_t));
 
+	xQueue_create_task = xQueueCreate( 1, sizeof(struct dd_task));
+	xQueue_create_task_message = xQueueCreate( 1, sizeof( uint32_t));
+
 	/* Add to the registry, for the benefit of kernel aware debugging. */
 	vQueueAddToRegistry( xQueue_Generator, "Generator Queue");
 	vQueueAddToRegistry( xQueue_DDS, "DDS Queue");
 	vQueueAddToRegistry( xQueue_Monitor, "Monitor Queue");
+
+	vQueueAddToRegistry( xQueue_create_task, "Create Task");
+	vQueueAddToRegistry( xQueue_create_task_message, "Create Task Message")
 
 	xTaskCreate( DD_Task_Generator, "Generate", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
 
@@ -165,7 +176,10 @@ void create_dd_task(uint32_t type, uint32_t task_id, uint32_t execution_time, ui
 
 	new_dd_task.type = type;
 	new_dd_task.task_id = task_id;
+	new_dd_task.execution_time = execution_time;
 	new_dd_task.absolute_deadline = absolute_deadline;
+	new_dd_task.message = 0;
+
 
 	if( xQueueSend( xQueue_DDS, (void *) &new_dd_task, 1000)) {
 		vTaskDelay(0);
