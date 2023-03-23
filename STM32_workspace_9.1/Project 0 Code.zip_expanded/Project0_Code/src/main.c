@@ -1,3 +1,4 @@
+
 /* Standard includes. */
 #include <stdint.h>
 #include <stdio.h>
@@ -98,26 +99,15 @@ int main(void)
 
 	/* Create the queue used by the queue send and queue receive tasks.
 	http://www.freertos.org/a00116.html */
-	xQueue_Generator = xQueueCreate( 100, sizeof( uint32_t));
-	xQueue_DDS = xQueueCreate( 100, sizeof( uint32_t));
-	xQueue_Monitor = xQueueCreate( 100, sizeof( uint32_t));
-
 	xQueue_create_task = xQueueCreate( 1, sizeof(struct dd_task));
 	xQueue_create_task_message = xQueueCreate( 1, sizeof( uint32_t));
 
 	/* Add to the registry, for the benefit of kernel aware debugging. */
-	vQueueAddToRegistry( xQueue_Generator, "Generator Queue");
-	vQueueAddToRegistry( xQueue_DDS, "DDS Queue");
-	vQueueAddToRegistry( xQueue_Monitor, "Monitor Queue");
 
 	vQueueAddToRegistry( xQueue_create_task, "Create Task");
 	vQueueAddToRegistry( xQueue_create_task_message, "Create Task Message")
 
 	xTaskCreate( DD_Task_Generator, "Generate", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
-
-	Task1_Release_Timer = xTimerCreate( "Task 1 timer", pdMS_TO_TICKS(Task1_Period), pdTRUE, (void *) 0, Task1_Callback);
-	Task2_Release_Timer = xTimerCreate( "Task 2 timer", pdMS_TO_TICKS(Task2_Period), pdTRUE, (void *) 0, Task2_Callback);
-	Task3_Release_Timer = xTimerCreate( "Task 3 timer", pdMS_TO_TICKS(Task3_Period), pdTRUE, (void *) 0, Task3_Callback);
 
 	/* Start the tasks and timer running. */
 	vTaskStartScheduler();
@@ -128,6 +118,125 @@ int main(void)
 
 /*-----------------------------------------------------------*/
 
+void xTask_DDS(void *pvParameters){
+	printf("DDS started\n");
+	//Heads of the lists
+	struct dd_task_list *active_list_head = (struct dd_task_list*)malloc(sizeof(struct dd_task_list));
+	active_list_head->next_task = NULL;
+
+	struct dd_task_list *complete_list_head = (struct dd_task_list*)malloc(sizeof(struct dd_task_list));
+	complete_list_head->next_task = NULL;
+
+	struct dd_task_list *overdue_list_head = (struct dd_task_list*)malloc(sizeof(struct dd_task_list));
+	overdue_list_head->next_task = NULL;
+
+
+	TaskHandle_t currently_active = NULL;
+	struct dd_task next_task;
+	TaskHandle_t finished_task;
+	uint16_t message;
+	while(1){
+
+		if(release_task_message != 0 && release_queue != 0 && xQueueReceive(release_queue, &next_task, 30)){
+			next_task.release_time = (uint32_t)xTaskGetTickCount();
+			listPriorityAdd(active_list_head, next_task);
+			uint16_t reply = 1;
+			if(!xQueueSend(release_task_message, &reply,30)) {
+                printf("Failed to send success message to release\n");
+            }
+			if (currently_active != NULL && currently_active != active_list_head->next_task->task.t_handle){
+				vTaskPrioritySet(currently_active, 1);
+			}
+			currently_active = active_list_head->next_task->task.t_handle;
+			vTaskPrioritySet(currently_active, 2);
+		}
+
+		//For Finished tasks
+		if(complete_task_message != 0 && complete_queue != 0 && xQueueReceive(complete_queue, &finished_task, 30)){
+
+			struct dd_task_list *curr = active_list_head;
+			uint16_t found = 1;
+			while(curr->task.t_handle != finished_task){
+				if (curr->next_task == NULL){
+					found = 0;
+					printf("Task to complete not found\n");
+				} else {
+					curr = curr->next_task;
+				}
+
+			}
+			if (found){
+				//printf("Completing Task %d\n", (int)curr->task.task_id);
+				curr->task.completion_time = (uint32_t) xTaskGetTickCount();
+				if (curr->task.completion_time > curr->task.absolute_deadline){
+					listAdd(overdue_list_head, curr->task);
+				} else {
+					listAdd(complete_list_head, curr->task);
+				}
+				listRemove(active_list_head, curr->task.task_id);
+				free(curr);
+			}
+			uint32_t reply = 1;
+			if(!xQueueOverwrite(complete_task_message, &reply)){
+                printf("Failed to send success message to complete\n");
+            }
+			//vTaskDelay(pdMS_TO_TICKS(1));
+			if(active_list_head->next_task != NULL){
+				if (currently_active != NULL && currently_active != active_list_head->next_task->task.t_handle){
+					vTaskPrioritySet(currently_active, 1);
+				}
+				currently_active = active_list_head->next_task->task.t_handle;
+				vTaskPrioritySet(currently_active, 2);
+			}
+		}
+
+		//Active task list request
+		message = 0;
+		if(active_list_message != 0 && xQueueReceive(active_list_message, &message, 30)){
+			if(message){
+				int reply = 2;
+				if(!xQueueOverwrite(active_task_list, &active_list_head)){
+                    printf("Failed to send active task list\n");
+                }
+				if(!xQueueOverwrite(active_list_message, &reply)){
+                    printf("Failed to send active_list_message\n");
+                }
+			}
+		}
+
+		//Complete task list request
+		message = 0;
+		if (complete_list_message != 0 && xQueueReceive(complete_list_message, &message, 30)){
+			if(message){
+				int reply = 2;
+				if(!xQueueOverwrite(complete_task_list, &complete_list_head)){
+                    printf("Failed to send active task list\n");
+                }
+				if(!xQueueOverwrite(complete_list_message, &reply)){
+                    printf("Failed to send complete message\n");
+                }
+			}
+		}
+
+		//Overdue task list request
+		message = 0;
+		if (overdue_list_message != 0 && xQueueReceive(overdue_list_message, &message, 30)){
+			if(message){
+				int reply = 2;
+				if(!xQueueOverwrite(overdue_task_list, &overdue_list_head)){
+                    printf("Failed to send overdue task list\n");
+                }
+				if(!xQueueOverwrite(overdue_list_message, &reply)){
+                    printf("Failed to send overdue message\n");
+                }
+			}
+		}
+
+		vTaskDelay(pdMS_TO_TICKS(1));
+
+	}
+
+}
 
 void DD_Task_Generator( void *pvParameters ){
 	uint32_t i = 0;
@@ -189,6 +298,56 @@ void create_dd_task(uint32_t type, uint32_t task_id, uint32_t execution_time, ui
 
 
 }
+
+void complete_dd_task(TaskHandle_t t_handle) {
+
+    xQueue_complete_task = xQueueCreate( 1, sizeof( Taskhandle_t));
+    xQueue_complete_task_message = xQueueCreate( 1, sizeof(uint32_t));
+
+    vQueueAddToRegistry(xQueue_complete_task, "Delete");
+    vQueueAddToRegistry(xQueue_complete_task_message, "Delete Message")
+
+    if(!xQueueOverwrite(xQueue_complete_task, &t_handle)){
+        printf('Complete task failedn');
+    }
+
+    int reply;
+
+    while(1){
+        if(xQueueReceive(xQueue_complete_task_message, &reply, 30)) {
+            break;
+        }
+    }
+    vTaskDelete(t_handle);
+    vQueueDelete(xQueue_complete_task);
+    vQueueDelete(xQueue_complete_task_message);
+    xQueue_complete_task = 0;
+    xQueue_complete_task_message = 0;
+}
+
+void get_active_dd_task_list(void) {
+    xQueue_active_task_list = xQueueCreate(1, sizeof(struct dd_task_list));
+    xQueue_active_list_message = xQueueCrate(1, sizeof(uint32_t));
+
+    vQueueAddToRegistry(xQueue_active_task_list, "Active list");
+    vQueueAddToRegistry(xQueue_active_list_message, "Active message");
+
+    int message = 1;
+    int reply;
+
+    if(!xQueueOverwrite(xQueue_active_list_message, &message)){
+        printf("Failed to send active task message\n");
+    }
+
+    while(1){
+        if(xQueuePeek(xQueue_active_list_message, &reply, 30)) {
+
+        }
+    }
+
+}
+
+void 
 
 
 /*-----------------------------------------------------------*/
