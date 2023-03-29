@@ -321,28 +321,6 @@ int get_active_dd_task_list(struct dd_task_list* head) {
 
 		i++;
 	}
-//    xQueue_active_task_list = xQueueCreate(1, sizeof(struct dd_task_list));
-//    xQueue_active_list_message = xQueueCreate(1, sizeof(uint32_t));
-//
-//    vQueueAddToRegistry(xQueue_active_task_list, "Active list");
-//    vQueueAddToRegistry(xQueue_active_list_message, "Active message");
-//
-//    int message = 1;
-//    int reply;
-//
-//    if(!xQueueOverwrite(xQueue_active_list_message, &message)){
-//        printf("Failed to send active task message\n");
-//    }
-//
-//    while(1){
-//        if(xQueuePeek(xQueue_active_list_message, &reply, 30)) {
-//        	if (reply == 2) {
-//        		break;
-//        	}
-//        }
-//    }
-//    vQueueDelete(xQueue_active_list_message);
-//    xQueue_active_list_message = 0;
 
     return i;
 }
@@ -357,28 +335,6 @@ int get_complete_dd_task_list(struct dd_task_list* head) {
 		i++;
 	}
 	return i;
-//    xQueue_complete_task_list = xQueueCreate(1, sizeof(struct dd_task_list));
-//    xQueue_complete_list_message = xQueueCreate(1, sizeof(uint32_t));
-//
-//    vQueueAddToRegistry(xQueue_complete_task_list, "Complete list");
-//    vQueueAddToRegistry(xQueue_complete_list_message, "Complete message");
-//
-//    int message = 1;
-//    int reply;
-//
-//    if(!xQueueOverwrite(xQueue_complete_list_message, &message)){
-//        printf("Failed to send complete task message\n");
-//    }
-//
-//    while(1){
-//        if(xQueuePeek(xQueue_complete_list_message, &reply, 30)) {
-//        	if (reply == 2) {
-//        		break;
-//        	}
-//        }
-//    }
-//    vQueueDelete(xQueue_complete_list_message);
-//    xQueue_complete_list_message = 0;
 
 }
 
@@ -392,28 +348,6 @@ int get_overdue_dd_task_list(struct dd_task_list* head) {
 		i++;
 	}
 	return i;
-//    xQueue_overdue_task_list = xQueueCreate(1, sizeof(struct dd_task_list));
-//    xQueue_overdue_list_message = xQueueCreate(1, sizeof(uint32_t));
-//
-//    vQueueAddToRegistry(xQueue_overdue_task_list, "Overdue list");
-//    vQueueAddToRegistry(xQueue_overdue_list_message, "Overdue message");
-//
-//    int message = 1;
-//    int reply;
-//
-//    if(!xQueueOverwrite(xQueue_overdue_list_message, &message)){
-//        printf("Failed to send overdue task message\n");
-//    }
-//
-//    while(1){
-//        if(xQueuePeek(xQueue_overdue_list_message, &reply, 30)) {
-//        	if (reply == 2) {
-//        		break;
-//        	}
-//        }
-//    }
-//    vQueueDelete(xQueue_overdue_list_message);
-//    xQueue_overdue_list_message = 0;
 
 }
 
