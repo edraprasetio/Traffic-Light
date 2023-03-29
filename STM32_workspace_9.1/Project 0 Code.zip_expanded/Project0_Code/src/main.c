@@ -12,7 +12,6 @@
 #include "../FreeRTOS_Source/include/timers.h"
 
 
-
 /*-----------------------------------------------------------*/
 
 struct dd_task {
@@ -145,7 +144,7 @@ void Deadline_Driven_Scheduler(void *pvParameters){
 			}
 		}
 		vTaskDelay(pdMS_TO_TICKS(1));
-
+		//( ( TickType_t ) ( ( ( TickType_t ) ( 1 ) * ( TickType_t ) ( ( TickType_t ) 500 ) ) / ( TickType_t ) 1000 ) )
 	}
 
 }
@@ -290,31 +289,6 @@ void create_dd_task(uint32_t type, uint32_t task_id, uint32_t execution_time, ui
 
 }
 
-//void delete_dd_task(TaskHandle_t t_handle) {
-//	xQueue_delete_task = xQueueCreate( 1, sizeof( TaskHandle_t));
-//	xQueue_delete_task_message = xQueueCreate( 1, sizeof(uint32_t));
-//
-//	vQueueAddToRegistry(xQueue_delete_task, "Delete");
-//	vQueueAddToRegistry(xQueue_delete_task_message, "Delete Message");
-//
-//	if(!xQueueOverwrite(xQueue_delete_task, &t_handle)){
-//		printf('Delete task failed\n');
-//	}
-//
-//	int reply;
-//
-//	while(1){
-//		if(xQueueReceive(xQueue_delete_task_message, &reply, 30)) {
-//			break;
-//		}
-//	}
-//	vTaskDelete(t_handle);
-//	vQueueDelete(xQueue_delete_task);
-//	vQueueDelete(xQueue_delete_task_message);
-//	xQueue_delete_task = 0;
-//	xQueue_delete_task_message = 0;
-//}
-
 struct dd_task dd_delete(struct dd_task_list* head, uint32_t task_id){
 	printf("Deleting a deadly driven task\n");
 	struct dd_task_list *current = head;
@@ -330,6 +304,7 @@ struct dd_task dd_delete(struct dd_task_list* head, uint32_t task_id){
 	else {
 		previous->next_task = current->next_task;
 	}
+//	current->task.t_handle;
 	vTaskDelete(current->task.t_handle);
 	return current->task;
 }
