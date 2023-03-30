@@ -1,3 +1,4 @@
+
 /* Standard includes. */
 #include <stdint.h>
 #include <stdio.h>
@@ -417,20 +418,6 @@ void addToList(struct dd_task_list *head, struct dd_task next_task, int f_sort) 
 	}
 	current->next_task = new_node;
 
-void listPriorityAdd(struct dd_task_list *head, struct dd_task next_task){
-	struct dd_task_list *new_node = (struct dd_task_list*)malloc(sizeof(struct dd_task_list));
-	new_node->task = next_task;
-	struct dd_task_list *curr = head;
-	while (curr->next_task != NULL){
-		if(curr->next_task->task.absolute_deadline > new_node->task.absolute_deadline){
-			new_node->next_task = curr->next_task;
-			curr->next_task = new_node;
-			return;
-		}
-		curr = curr->next_task;
-	}
-	new_node->next_task = curr->next_task;
-	curr->next_task = new_node;
 }
 
 
